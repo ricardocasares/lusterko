@@ -485,13 +485,12 @@ debugNavButton msg label glyph =
         [ text glyph ]
 
 
-{-| The target pose over the right third of the camera feed, on a gradient that darkens
-towards the edge, big enough to read from across a room, with a footer slot for the caption or controls.
+{-| The target pose drawn large in the centre of the camera feed, big enough to read from across a room, with a footer slot for the caption or controls.
 -}
 targetGhost : Pose.Target -> Html Msg -> Html Msg
 targetGhost target footer =
-    div [ HA.class "absolute inset-y-0 right-0 flex w-1/3 flex-col items-center justify-center gap-4 bg-gradient-to-r from-transparent to-black/70" ]
-        [ targetSkeleton "max-h-[60vh] w-full max-w-full" target
+    div [ HA.class "absolute inset-0 flex flex-col items-center justify-center gap-4" ]
+        [ targetSkeleton "h-[60vh] w-auto" target
         , footer
         ]
 
@@ -528,6 +527,13 @@ targetPoseOverlay game =
                 (div [ HA.class "text-sm font-black uppercase tracking-[.2em] text-white drop-shadow-lg sm:text-base" ]
                     [ text (poseCounter game.shown game.total) ]
                 )
+
+        Game.Celebrating _ [] ->
+            div
+                [ HA.class "absolute inset-0 z-20 grid place-items-center bg-zinc-950 text-center"
+                , HA.attribute "role" "status"
+                ]
+                [ div [ HA.class "text-[9rem] font-black leading-none text-white sm:text-[14rem]" ] [ text "Miss" ] ]
 
         Game.Celebrating _ scorers ->
             div

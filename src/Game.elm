@@ -264,9 +264,11 @@ startNext now game =
             { game | phase = Results (now + 5000) }
 
 
+{-| A round nobody matched shows the same short interlude as a scored one, with no scorers.
+-}
 afterMiss : Int -> Game -> Game
 afterMiss now game =
-    nextOrResults now "Time's up" { game | players = resetHolds game.players }
+    { game | phase = Celebrating (now + 1000) [], players = resetHolds game.players }
 
 
 nextOrResults : Int -> String -> Game -> Game

@@ -41,20 +41,25 @@ tests =
 
                     Game.Restart ->
                         Expect.fail "restarted too early"
-        , test "a timed-out final pose shows results and restarts after five seconds" <|
+        , test "a timed-out final pose shows a miss, then results, then restarts after five seconds" <|
             \_ ->
                 let
                     active =
                         startSingle syntheticTarget
                 in
                 case Game.tick 8000 active of
-                    Game.Continue resultGame ->
-                        case ( resultGame.phase, Game.tick 13000 resultGame ) of
-                            ( Game.Results 13000, Game.Restart ) ->
-                                Expect.pass
+                    Game.Continue missGame ->
+                        case ( missGame.phase, Game.tick 9000 missGame ) of
+                            ( Game.Celebrating 9000 [], Game.Continue resultGame ) ->
+                                case ( resultGame.phase, Game.tick 14000 resultGame ) of
+                                    ( Game.Results 14000, Game.Restart ) ->
+                                        Expect.pass
+
+                                    _ ->
+                                        Expect.fail "expected five-second results then restart"
 
                             _ ->
-                                Expect.fail "expected five-second results then restart"
+                                Expect.fail "expected a one-second miss interlude"
 
                     Game.Restart ->
                         Expect.fail "restarted without results"
