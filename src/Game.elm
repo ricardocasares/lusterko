@@ -198,16 +198,15 @@ updatePlayer capturedAt requestedTarget phase ordered index player =
 
 keepHold : Int -> Player -> Maybe Int
 keepHold capturedAt player =
-    case player.lastMatched of
-        Just matchedAt ->
-            if capturedAt - matchedAt <= holdGraceMillis then
-                player.holdStarted
+    player.lastMatched
+        |> Maybe.andThen
+            (\matchedAt ->
+                if capturedAt - matchedAt <= holdGraceMillis then
+                    player.holdStarted
 
-            else
-                Nothing
-
-        Nothing ->
-            Nothing
+                else
+                    Nothing
+            )
 
 
 qualifies : Int -> Player -> Bool
