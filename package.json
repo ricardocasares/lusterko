@@ -1,0 +1,23 @@
+{
+  "name": "lusterko",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "elm-test",
+    "check": "elm-test && tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "elm": "0.19.2-0",
+    "elm-test": "0.19.2-1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "8.2.2",
+    "vite-plugin-elm": "3.0.1"
+  }
+}

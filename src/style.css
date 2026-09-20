@@ -1,0 +1,49 @@
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap");
+@import "tailwindcss";
+
+html,
+body,
+#app {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    margin: 0;
+    background: #09090b;
+    font-family: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+}
+
+button {
+    cursor: pointer;
+}
+
+.start-pulse {
+    isolation: isolate;
+    position: relative;
+}
+
+.start-pulse::after {
+    animation: start-pulse 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+    background: #f0abfc;
+    border-radius: inherit;
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+}
+
+@keyframes start-pulse {
+    75%,
+    100% {
+        opacity: 0;
+        transform: scale(1.35);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .start-pulse::after {
+        animation: none;
+    }
+}
