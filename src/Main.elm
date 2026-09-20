@@ -265,61 +265,75 @@ skeletons poses =
 skeleton : Int -> Camera.RawPose -> Svg.Svg Msg
 skeleton index rawPose =
     let
-        color =
-            playerColor index
+        -- Landmarks are in frame-height units, so both axes scale by the viewBox height.
+        visiblePoint landmarkIndex =
+            Pose.landmarkAt landmarkIndex rawPose
+                |> Maybe.andThen
+                    (\landmark ->
+                        if landmark.visibility >= 0.5 then
+                            Just { x = landmark.x * 9, y = landmark.y * 9 }
 
-        bone stroke width ( fromIndex, toIndex ) =
-            case ( Pose.landmarkAt fromIndex rawPose, Pose.landmarkAt toIndex rawPose ) of
-                ( Just from, Just to ) ->
-                    if from.visibility >= 0.5 && to.visibility >= 0.5 then
-                        -- Landmarks are in frame-height units, so both axes scale by the viewBox height.
-                        Svg.line
-                            [ SA.x1 (String.fromFloat (from.x * 9))
-                            , SA.y1 (String.fromFloat (from.y * 9))
-                            , SA.x2 (String.fromFloat (to.x * 9))
-                            , SA.y2 (String.fromFloat (to.y * 9))
-                            , SA.stroke stroke
-                            , SA.strokeWidth width
-                            , SA.strokeLinecap "round"
-                            ]
-                            []
-
-                    else
-                        Svg.text ""
-
-                _ ->
-                    Svg.text ""
-
-        joint jointIndex =
-            case Pose.landmarkAt jointIndex rawPose of
-                Just landmark ->
-                    if landmark.visibility >= 0.5 then
-                        Svg.circle
-                            [ SA.cx (String.fromFloat (landmark.x * 9))
-                            , SA.cy (String.fromFloat (landmark.y * 9))
-                            , SA.r "0.09"
-                            , SA.fill color
-                            , SA.stroke "#09090b"
-                            , SA.strokeWidth "0.025"
-                            ]
-                            []
-
-                    else
-                        Svg.text ""
-
-                Nothing ->
-                    Svg.text ""
+                        else
+                            Nothing
+                    )
     in
     Svg.g []
-        (List.map (bone "#09090b" "0.10") Pose.skeleton
-            ++ List.map (bone color "0.075") Pose.skeleton
-            ++ List.map joint skeletonJoints
+        (skeletonLayers
+            { color = playerColor index, boneWidth = 0.12, jointRadius = 0.12, outline = 0.03 }
+            (List.filterMap (\( from, to ) -> Maybe.map2 Tuple.pair (visiblePoint from) (visiblePoint to)) Pose.skeleton)
+            (List.filterMap visiblePoint skeletonJoints)
         )
 
 
 skeletonJoints : List Int
 skeletonJoints =
     [ 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28 ]
+
+
+type alias SkeletonStyle =
+    { color : String
+    , boneWidth : Float
+    , jointRadius : Float
+    , outline : Float
+    }
+
+
+{-| Draws a skeleton as a translucent dark outline pass with coloured bones and joints
+on top, so it stays legible over any background.
+-}
+skeletonLayers : SkeletonStyle -> List ( SkeletonPoint, SkeletonPoint ) -> List SkeletonPoint -> List (Svg.Svg msg)
+skeletonLayers style segments joints =
+    let
+        bone stroke width ( from, to ) =
+            Svg.line
+                [ SA.x1 (String.fromFloat from.x)
+                , SA.y1 (String.fromFloat from.y)
+                , SA.x2 (String.fromFloat to.x)
+                , SA.y2 (String.fromFloat to.y)
+                , SA.stroke stroke
+                , SA.strokeWidth (String.fromFloat width)
+                , SA.strokeLinecap "round"
+                ]
+                []
+
+        joint fill radius point =
+            Svg.circle
+                [ SA.cx (String.fromFloat point.x)
+                , SA.cy (String.fromFloat point.y)
+                , SA.r (String.fromFloat radius)
+                , SA.fill fill
+                ]
+                []
+    in
+    [ Svg.g [ SA.opacity "0.45" ]
+        (List.map (bone "#09090b" (style.boneWidth + 2 * style.outline)) segments
+            ++ List.map (joint "#09090b" (style.jointRadius + style.outline)) joints
+        )
+    , Svg.g []
+        (List.map (bone style.color style.boneWidth) segments
+            ++ List.map (joint style.color style.jointRadius) joints
+        )
+    ]
 
 
 cameraOverlay : Model -> Html Msg
@@ -332,7 +346,7 @@ cameraOverlay model =
             splashScreen "Getting ready" "Allow camera access" loader
 
         Failed error ->
-            statusOverlay "Camera check needed" error True
+            statusOverlay "Camera check needed" error
 
         Shuffling ->
             splashScreen "New game" "Shuffling poses" loader
@@ -385,8 +399,8 @@ loader =
         []
 
 
-statusOverlay : String -> String -> Bool -> Html Msg
-statusOverlay title body retry =
+statusOverlay : String -> String -> Html Msg
+statusOverlay title body =
     div
         [ HA.class "absolute inset-0 grid place-items-center bg-zinc-950/90 p-6 text-center backdrop-blur-sm"
         , HA.attribute "role" "status"
@@ -396,15 +410,11 @@ statusOverlay title body retry =
             [ p [ HA.class "mb-3 text-xs font-bold tracking-[.3em] text-emerald-300" ] [ text "LUSTERKO" ]
             , h1 [ HA.class "text-4xl font-black tracking-[-.04em]" ] [ text title ]
             , p [ HA.class "mx-auto mt-4 max-w-sm leading-7 text-white/60" ] [ text body ]
-            , if retry then
-                button
-                    [ onClick Start
-                    , HA.class "mt-7 min-h-14 rounded-2xl bg-emerald-300 px-8 font-black text-zinc-950 hover:bg-emerald-200"
-                    ]
-                    [ text "Try again" ]
-
-              else
-                div [ HA.class "mx-auto mt-7 size-7 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300" ] []
+            , button
+                [ onClick Start
+                , HA.class "mt-7 min-h-14 rounded-2xl bg-emerald-300 px-8 font-black text-zinc-950 hover:bg-emerald-200"
+                ]
+                [ text "Try again" ]
             ]
         ]
 
@@ -433,13 +443,6 @@ debugHud debug =
 
                         Nothing ->
                             "no full body in view"
-
-                statusClass =
-                    if matched then
-                        " bg-emerald-300 text-zinc-950"
-
-                    else
-                        " bg-black/60 text-white"
             in
             section
                 [ HA.class "pointer-events-none absolute inset-0"
@@ -447,29 +450,17 @@ debugHud debug =
                 ]
                 [ div [ HA.class "absolute left-4 top-4 rounded-full bg-black/60 px-5 py-3 text-sm font-black uppercase tracking-[.25em] backdrop-blur-sm sm:left-6 sm:top-6" ]
                     [ text "Debug · D to exit" ]
-                , div [ HA.class "absolute right-4 top-4 flex flex-col items-center sm:right-6 sm:top-6" ]
-                    [ div [ HA.class "flex size-64 flex-col items-center rounded-[2rem] bg-black/60 shadow-xl backdrop-blur-sm sm:size-80 lg:size-96" ]
-                        [ targetSkeleton "min-h-0 w-full flex-1 p-6 pb-0" target
-                        , div [ HA.class "pointer-events-auto flex shrink-0 items-center gap-3 pb-4" ]
-                            [ button
-                                [ onClick (SelectDebugPose (debug.selected - 1))
-                                , HA.class "grid size-10 place-items-center rounded-full bg-white text-2xl font-black text-zinc-950 hover:bg-fuchsia-200 sm:size-12 sm:text-3xl"
-                                , HA.attribute "aria-label" "Previous pose"
-                                ]
-                                [ text "‹" ]
-                            , div [ HA.class "min-w-32 text-center text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:min-w-36 sm:text-base" ]
-                                [ text ("Pose " ++ String.fromInt (debug.selected + 1) ++ "/" ++ String.fromInt (List.length Pose.allTargets)) ]
-                            , button
-                                [ onClick (SelectDebugPose (debug.selected + 1))
-                                , HA.class "grid size-10 place-items-center rounded-full bg-white text-2xl font-black text-zinc-950 hover:bg-fuchsia-200 sm:size-12 sm:text-3xl"
-                                , HA.attribute "aria-label" "Next pose"
-                                ]
-                                [ text "›" ]
-                            ]
+                , targetCard target
+                    (div [ HA.class "pointer-events-auto flex shrink-0 items-center gap-3 pb-4" ]
+                        [ debugNavButton (SelectDebugPose (debug.selected - 1)) "Previous pose" "‹"
+                        , div [ HA.class "min-w-32 text-center text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:min-w-36 sm:text-base" ]
+                            [ text (poseCounter (debug.selected + 1) (List.length Pose.allTargets)) ]
+                        , debugNavButton (SelectDebugPose (debug.selected + 1)) "Next pose" "›"
                         ]
-                    ]
+                    )
                 , div
-                    [ HA.class ("absolute bottom-6 left-1/2 -translate-x-1/2 rounded-[2rem] px-10 py-5 text-center text-5xl font-black uppercase tracking-[-.04em] shadow-xl backdrop-blur-sm sm:text-7xl" ++ statusClass)
+                    [ HA.class "absolute bottom-6 left-1/2 -translate-x-1/2 rounded-[2rem] px-10 py-5 text-center text-5xl font-black uppercase tracking-[-.04em] shadow-xl backdrop-blur-sm sm:text-7xl"
+                    , HA.classList [ ( "bg-emerald-300 text-zinc-950", matched ), ( "bg-black/60 text-white", not matched ) ]
                     , HA.attribute "role" "status"
                     ]
                     [ text
@@ -482,6 +473,33 @@ debugHud debug =
                     , div [ HA.class "mt-2 text-base font-bold normal-case tracking-normal opacity-70 sm:text-lg" ] [ text errorText ]
                     ]
                 ]
+
+
+debugNavButton : Msg -> String -> String -> Html Msg
+debugNavButton msg label glyph =
+    button
+        [ onClick msg
+        , HA.class "grid size-10 place-items-center rounded-full bg-white text-2xl font-black text-zinc-950 hover:bg-fuchsia-200 sm:size-12 sm:text-3xl"
+        , HA.attribute "aria-label" label
+        ]
+        [ text glyph ]
+
+
+{-| Top-right card showing the target pose, with a footer slot for the caption or controls.
+-}
+targetCard : Pose.Target -> Html Msg -> Html Msg
+targetCard target footer =
+    div [ HA.class "absolute right-4 top-4 flex flex-col items-center sm:right-6 sm:top-6" ]
+        [ div [ HA.class "flex size-64 flex-col items-center rounded-[2rem] bg-black/35 shadow-xl backdrop-blur-sm sm:size-80 lg:size-96 xl:size-[28rem]" ]
+            [ targetSkeleton "min-h-0 w-full flex-1 p-7 pb-1" target
+            , footer
+            ]
+        ]
+
+
+poseCounter : Int -> Int -> String
+poseCounter shown total =
+    "Pose " ++ String.fromInt shown ++ "/" ++ String.fromInt total
 
 
 gameHud : Game.Game -> Html Msg
@@ -503,19 +521,14 @@ targetPoseOverlay game =
                 [ HA.class "absolute inset-0 z-20 grid place-items-center bg-black/20 text-center backdrop-blur-[2px]"
                 , HA.attribute "role" "timer"
                 ]
-                [ div []
-                    [ div [ HA.class "text-[10rem] font-black leading-none tabular-nums text-white drop-shadow-2xl sm:text-[16rem]" ] [ text (secondsLeft game.now deadline) ] ]
-                ]
+                [ div [ HA.class "text-[10rem] font-black leading-none tabular-nums text-white drop-shadow-2xl sm:text-[16rem]" ] [ text (secondsLeft game.now deadline) ] ]
 
         Game.Playing target deadline ->
             div [ HA.class "contents" ]
-                [ div [ HA.class "absolute right-4 top-4 flex flex-col items-center sm:right-6 sm:top-6" ]
-                    [ div [ HA.class "flex size-64 flex-col items-center rounded-[2rem] bg-black/35 shadow-xl backdrop-blur-sm sm:size-80 lg:size-96 xl:size-[28rem]" ]
-                        [ targetSkeleton "min-h-0 w-full flex-1 p-7 pb-1" target
-                        , div [ HA.class "shrink-0 pb-5 text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:text-base" ]
-                            [ text ("Pose " ++ String.fromInt game.shown ++ "/" ++ String.fromInt game.total) ]
-                        ]
-                    ]
+                [ targetCard target
+                    (div [ HA.class "shrink-0 pb-5 text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:text-base" ]
+                        [ text (poseCounter game.shown game.total) ]
+                    )
                 , div [ HA.class "absolute bottom-4 right-4 z-10 min-w-40 px-8 py-4 text-center text-8xl font-black leading-none tabular-nums text-white shadow-xl backdrop-blur-sm sm:bottom-6 sm:right-6 sm:min-w-56 sm:text-[10rem]" ]
                     [ text (secondsLeft game.now deadline) ]
                 ]
@@ -528,12 +541,10 @@ targetPoseOverlay game =
                 ]
                 (List.map
                     (\player ->
-                        div
-                            [ HA.class "grid min-w-0 flex-1 place-items-center"
-                            , HA.style "background" (playerColor (player - 1))
-                            , HA.attribute "aria-hidden" "true"
-                            ]
-                            [ div [ HA.class "text-[9rem] font-black leading-none text-zinc-950 sm:text-[14rem]" ] [ text "+1" ] ]
+                        playerColumn (player - 1)
+                            [ HA.attribute "aria-hidden" "true" ]
+                            "text-[9rem] leading-none sm:text-[14rem]"
+                            "+1"
                     )
                     scorers
                 )
@@ -552,15 +563,25 @@ targetPoseOverlay game =
                  ]
                     ++ List.indexedMap
                         (\index player ->
-                            div
-                                [ HA.class "grid min-w-0 flex-1 place-items-center"
-                                , HA.style "background" (playerColor index)
-                                , HA.attribute "aria-label" (playerName index ++ " final score " ++ String.fromInt player.score)
-                                ]
-                                [ div [ HA.class "text-7xl font-black tabular-nums text-zinc-950 sm:text-9xl lg:text-[10rem]" ] [ text (String.fromInt player.score) ] ]
+                            playerColumn index
+                                [ HA.attribute "aria-label" (playerName index ++ " final score " ++ String.fromInt player.score) ]
+                                "text-7xl tabular-nums sm:text-9xl lg:text-[10rem]"
+                                (String.fromInt player.score)
                         )
                         game.players
                 )
+
+
+{-| Full-height column in a player's colour with one big figure in it.
+-}
+playerColumn : Int -> List (Html.Attribute Msg) -> String -> String -> Html Msg
+playerColumn index attributes figureClass figure =
+    div
+        (HA.class "grid min-w-0 flex-1 place-items-center"
+            :: HA.style "background" (playerColor index)
+            :: attributes
+        )
+        [ div [ HA.class ("font-black text-zinc-950 " ++ figureClass) ] [ text figure ] ]
 
 
 targetSkeleton : String -> Pose.Target -> Html Msg
@@ -627,38 +648,16 @@ targetSkeleton className target =
 
                 joints =
                     [ leftShoulder, rightShoulder, leftElbow, rightElbow, leftWrist, rightWrist, leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle ]
-
-                bone stroke width ( from, to ) =
-                    Svg.line
-                        [ SA.x1 (String.fromFloat from.x)
-                        , SA.y1 (String.fromFloat from.y)
-                        , SA.x2 (String.fromFloat to.x)
-                        , SA.y2 (String.fromFloat to.y)
-                        , SA.stroke stroke
-                        , SA.strokeWidth width
-                        , SA.strokeLinecap "round"
-                        ]
-                        []
-
-                joint point =
-                    Svg.circle
-                        [ SA.cx (String.fromFloat point.x)
-                        , SA.cy (String.fromFloat point.y)
-                        , SA.r "1.15"
-                        , SA.fill "#f0abfc"
-                        , SA.stroke "#09090b"
-                        , SA.strokeWidth "0.45"
-                        ]
-                        []
             in
             Svg.svg
-                [ SA.viewBox "0 0 100 100"
+                [ SA.viewBox "-4 -4 108 108"
                 , SA.class className
                 , HA.attribute "aria-hidden" "true"
                 ]
-                (List.map (bone "#09090b" "2.4") segments
-                    ++ List.map (bone "#f0abfc" "1.25") segments
-                    ++ List.map joint joints
+                (skeletonLayers
+                    { color = "#f0abfc", boneWidth = 2.1, jointRadius = 1.7, outline = 0.5 }
+                    segments
+                    joints
                 )
 
         _ ->
@@ -695,29 +694,13 @@ scoreBoard game =
 playerCard : Game.Game -> Int -> Game.Player -> Html Msg
 playerCard game index player =
     let
-        opacity =
-            if player.active then
-                " opacity-100"
-
-            else
-                " opacity-45"
-
         progress =
             round (Game.holdFraction game.now player * 100)
-
-        color =
-            playerColor index
-
-        matching =
-            if player.matching then
-                " scale-110"
-
-            else
-                ""
     in
     div
-        [ HA.class ("min-w-24 rounded-3xl px-5 py-4 text-zinc-950 shadow-xl transition sm:min-w-32 sm:px-6 sm:py-5" ++ opacity ++ matching)
-        , HA.style "background" color
+        [ HA.class "min-w-24 rounded-3xl px-5 py-4 text-zinc-950 shadow-xl transition sm:min-w-32 sm:px-6 sm:py-5"
+        , HA.classList [ ( "opacity-100", player.active ), ( "opacity-45", not player.active ), ( "scale-110", player.matching ) ]
+        , HA.style "background" (playerColor index)
         , HA.attribute "aria-label" (playerName index ++ " score " ++ String.fromInt player.score)
         ]
         [ strong [ HA.class "block text-center text-5xl font-black leading-none tabular-nums sm:text-7xl" ] [ text (String.fromInt player.score) ]
