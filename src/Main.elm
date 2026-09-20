@@ -10,9 +10,10 @@ import Html.Events exposing (onClick)
 import Json.Decode as Decode
 import Pose
 import Random
+import Sound
 import Svg
 import Svg.Attributes as SA
-import Task
+import Task exposing (Task)
 import Time
 
 
@@ -43,6 +44,7 @@ type Msg
     | DebugPosesSampled (Result String (List Camera.RawPose))
     | SelectDebugPose Int
     | ToggleDebug
+    | SoundPlayed
 
 
 type alias SkeletonPoint =
@@ -80,7 +82,7 @@ update msg model =
             ( Shuffling, Task.perform (GameStarted targets) Time.now )
 
         GameStarted targets now ->
-            ( Running (Game.begin (Time.posixToMillis now) targets), Cmd.none )
+            ( Running (Game.begin (Time.posixToMillis now) targets), playSound (Just Sound.Ready) )
 
         Tick now ->
             case model of
@@ -102,7 +104,11 @@ update msg model =
         PosesSampled capturedAt requestedTarget result ->
             case ( model, result ) of
                 ( Running game, Ok poses ) ->
-                    ( Running (Game.recordPoses capturedAt requestedTarget poses game), Cmd.none )
+                    let
+                        recorded =
+                            Game.recordPoses capturedAt requestedTarget poses game
+                    in
+                    ( Running recorded, playSound (phaseSound game recorded) )
 
                 ( Running _, Err error ) ->
                     ( Failed (friendlyCameraError error), Cmd.none )
@@ -120,6 +126,9 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        SoundPlayed ->
+            ( model, Cmd.none )
 
         SelectDebugPose index ->
             case model of
@@ -159,13 +168,17 @@ advance now game =
             shuffle
 
         Game.Continue advanced ->
+            let
+                sound =
+                    phaseSound game advanced
+            in
             case advanced.phase of
                 Game.Results _ ->
-                    ( Running advanced, Cmd.none )
+                    ( Running advanced, playSound sound )
 
                 _ ->
                     if advanced.sampling then
-                        ( Running advanced, Cmd.none )
+                        ( Running advanced, playSound sound )
 
                     else
                         let
@@ -175,10 +188,67 @@ advance now game =
                             capturedAt =
                                 Time.posixToMillis now
                         in
+                        -- The elm-ffi polyfill can only have one call in flight at a time, so the
+                        -- sound is chained ahead of the sample instead of batched beside it.
                         ( Running { advanced | sampling = True }
-                        , Camera.samplePoses now
+                        , soundTask sound
+                            |> Task.andThen (\_ -> Camera.samplePoses now)
                             |> Task.attempt (PosesSampled capturedAt requestedTarget)
                         )
+
+
+{-| The sound for what just changed between two game states: outcome sounds when a
+phase begins, and a tick whenever a visible countdown drops a second.
+-}
+phaseSound : Game.Game -> Game.Game -> Maybe Sound.Sound
+phaseSound before after =
+    case ( before.phase, after.phase ) of
+        ( Game.Celebrating _ _, Game.Celebrating _ _ ) ->
+            Nothing
+
+        ( _, Game.Celebrating _ [] ) ->
+            Just Sound.Error
+
+        ( _, Game.Celebrating _ _ ) ->
+            Just Sound.Success
+
+        ( Game.Results _, Game.Results _ ) ->
+            Nothing
+
+        ( _, Game.Results _ ) ->
+            Just Sound.Bloom
+
+        _ ->
+            if countdownSeconds after /= countdownSeconds before && countdownSeconds after /= Nothing then
+                Just Sound.Tick
+
+            else
+                Nothing
+
+
+soundTask : Maybe Sound.Sound -> Task String ()
+soundTask =
+    Maybe.map Sound.play >> Maybe.withDefault (Task.succeed ())
+
+
+{-| Sounds are fire-and-forget: cuelume never throws, so the result is ignored.
+-}
+playSound : Maybe Sound.Sound -> Cmd Msg
+playSound sound =
+    soundTask sound |> Task.attempt (always SoundPlayed)
+
+
+countdownSeconds : Game.Game -> Maybe String
+countdownSeconds game =
+    case game.phase of
+        Game.Countdown deadline _ ->
+            Just (secondsLeft game.now deadline)
+
+        Game.Playing _ deadline ->
+            Just (secondsLeft game.now deadline)
+
+        _ ->
+            Nothing
 
 
 shuffle : ( Model, Cmd Msg )
