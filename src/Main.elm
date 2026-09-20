@@ -450,10 +450,10 @@ debugHud debug =
                 ]
                 [ div [ HA.class "absolute left-4 top-4 rounded-full bg-black/60 px-5 py-3 text-sm font-black uppercase tracking-[.25em] backdrop-blur-sm sm:left-6 sm:top-6" ]
                     [ text "Debug · D to exit" ]
-                , targetCard target
-                    (div [ HA.class "pointer-events-auto flex shrink-0 items-center gap-3 pb-4" ]
+                , targetGhost target
+                    (div [ HA.class "pointer-events-auto flex shrink-0 items-center gap-3" ]
                         [ debugNavButton (SelectDebugPose (debug.selected - 1)) "Previous pose" "‹"
-                        , div [ HA.class "min-w-32 text-center text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:min-w-36 sm:text-base" ]
+                        , div [ HA.class "min-w-32 text-center text-sm font-black uppercase tracking-[.2em] text-white sm:min-w-36 sm:text-base" ]
                             [ text (poseCounter (debug.selected + 1) (List.length Pose.allTargets)) ]
                         , debugNavButton (SelectDebugPose (debug.selected + 1)) "Next pose" "›"
                         ]
@@ -485,15 +485,14 @@ debugNavButton msg label glyph =
         [ text glyph ]
 
 
-{-| Top-right card showing the target pose, with a footer slot for the caption or controls.
+{-| The target pose over the right third of the camera feed, on a gradient that darkens
+towards the edge, big enough to read from across a room, with a footer slot for the caption or controls.
 -}
-targetCard : Pose.Target -> Html Msg -> Html Msg
-targetCard target footer =
-    div [ HA.class "absolute right-4 top-4 flex flex-col items-center sm:right-6 sm:top-6" ]
-        [ div [ HA.class "flex size-64 flex-col items-center rounded-[2rem] bg-black/35 shadow-xl backdrop-blur-sm sm:size-80 lg:size-96 xl:size-[28rem]" ]
-            [ targetSkeleton "min-h-0 w-full flex-1 p-7 pb-1" target
-            , footer
-            ]
+targetGhost : Pose.Target -> Html Msg -> Html Msg
+targetGhost target footer =
+    div [ HA.class "absolute inset-y-0 right-0 flex w-1/3 flex-col items-center justify-center gap-4 bg-gradient-to-r from-transparent to-black/70" ]
+        [ targetSkeleton "max-h-[60vh] w-full max-w-full" target
+        , footer
         ]
 
 
@@ -508,7 +507,8 @@ gameHud game =
         [ HA.class "pointer-events-none absolute inset-0 flex flex-col justify-between p-4 sm:p-6"
         , HA.attribute "aria-live" "polite"
         ]
-        [ targetPoseOverlay game
+        [ timerCard game
+        , targetPoseOverlay game
         , scoreBoard game
         ]
 
@@ -523,17 +523,11 @@ targetPoseOverlay game =
                 ]
                 [ div [ HA.class "text-[10rem] font-black leading-none tabular-nums text-white drop-shadow-2xl sm:text-[16rem]" ] [ text (secondsLeft game.now deadline) ] ]
 
-        Game.Playing target deadline ->
-            div [ HA.class "contents" ]
-                [ targetCard target
-                    (div [ HA.class "shrink-0 pb-5 text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:text-base" ]
-                        [ text (poseCounter game.shown game.total) ]
-                    )
-                , div [ HA.class "absolute bottom-4 right-4 z-10 min-w-24 rounded-3xl bg-black/35 px-5 py-4 text-white shadow-xl backdrop-blur-sm sm:bottom-6 sm:right-6 sm:min-w-32 sm:px-6 sm:py-5" ]
-                    [ strong [ HA.class "block text-center text-5xl font-black leading-none tabular-nums sm:text-7xl" ] [ text (secondsLeft game.now deadline) ]
-                    , div [ HA.class "mt-4 h-1.5" ] []
-                    ]
-                ]
+        Game.Playing target _ ->
+            targetGhost target
+                (div [ HA.class "text-sm font-black uppercase tracking-[.2em] text-white drop-shadow-lg sm:text-base" ]
+                    [ text (poseCounter game.shown game.total) ]
+                )
 
         Game.Celebrating _ scorers ->
             div
@@ -657,7 +651,7 @@ targetSkeleton className target =
                 , HA.attribute "aria-hidden" "true"
                 ]
                 (skeletonLayers
-                    { color = "#f0abfc", boneWidth = 2.1, jointRadius = 1.7, outline = 0.5 }
+                    { color = "#ffffff", boneWidth = 2.1, jointRadius = 1.7, outline = 0.5 }
                     segments
                     joints
                 )
@@ -693,6 +687,30 @@ scoreBoard game =
         )
 
 
+{-| Seconds left in the round, top-left, sized like a score card.
+-}
+timerCard : Game.Game -> Html Msg
+timerCard game =
+    case game.phase of
+        Game.Playing _ deadline ->
+            div
+                [ HA.class "absolute left-4 top-4 min-w-24 rounded-3xl bg-black/35 px-5 py-4 text-white shadow-xl backdrop-blur-sm sm:left-6 sm:top-6 sm:min-w-32 sm:px-6 sm:py-5"
+                , HA.attribute "role" "timer"
+                ]
+                [ strong [ HA.class "block text-center text-5xl font-black leading-none tabular-nums sm:text-7xl" ] [ text (secondsLeft game.now deadline) ]
+                , div [ HA.class "mt-4 h-1.5 overflow-hidden rounded-full bg-white/20" ]
+                    [ div
+                        [ HA.class "h-full rounded-full bg-white"
+                        , HA.style "width" (String.fromInt (remainingPercent game.now deadline) ++ "%")
+                        ]
+                        []
+                    ]
+                ]
+
+        _ ->
+            text ""
+
+
 playerCard : Game.Game -> Int -> Game.Player -> Html Msg
 playerCard game index player =
     let
@@ -714,6 +732,11 @@ playerCard game index player =
                 []
             ]
         ]
+
+
+remainingPercent : Int -> Int -> Int
+remainingPercent now deadline =
+    clamp 0 100 (round (toFloat (deadline - now) * 100 / toFloat Game.roundMillis))
 
 
 secondsLeft : Int -> Int -> String

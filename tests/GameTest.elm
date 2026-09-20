@@ -28,13 +28,13 @@ tests =
                 Expect.notEqual
                     (List.map .expected (generatedTargets 42))
                     (List.map .expected (generatedTargets 43))
-        , test "countdown reveals a pose for ten seconds" <|
+        , test "countdown reveals a pose for five seconds" <|
             \_ ->
                 case Game.tick 3000 (Game.begin 0 (List.take 2 (generatedTargets 42))) of
                     Game.Continue game ->
                         case game.phase of
                             Game.Playing _ deadline ->
-                                Expect.equal ( 1, 13000 ) ( game.shown, deadline )
+                                Expect.equal ( 1, 8000 ) ( game.shown, deadline )
 
                             _ ->
                                 Expect.fail "expected an active round"
@@ -47,10 +47,10 @@ tests =
                     active =
                         startSingle syntheticTarget
                 in
-                case Game.tick 13000 active of
+                case Game.tick 8000 active of
                     Game.Continue resultGame ->
-                        case ( resultGame.phase, Game.tick 18000 resultGame ) of
-                            ( Game.Results 18000, Game.Restart ) ->
+                        case ( resultGame.phase, Game.tick 13000 resultGame ) of
+                            ( Game.Results 13000, Game.Restart ) ->
                                 Expect.pass
 
                             _ ->
@@ -115,13 +115,13 @@ tests =
                 let
                     atDeadline =
                         startSingle syntheticTarget
-                            |> Game.recordPoses 12400 (Just syntheticTarget.id) [ syntheticPose ]
-                            |> Game.recordPoses 13000 (Just syntheticTarget.id) [ syntheticPose ]
+                            |> Game.recordPoses 7400 (Just syntheticTarget.id) [ syntheticPose ]
+                            |> Game.recordPoses 8000 (Just syntheticTarget.id) [ syntheticPose ]
 
                     afterDeadline =
                         startSingle syntheticTarget
-                            |> Game.recordPoses 12400 (Just syntheticTarget.id) [ syntheticPose ]
-                            |> Game.recordPoses 13001 (Just syntheticTarget.id) [ syntheticPose ]
+                            |> Game.recordPoses 7400 (Just syntheticTarget.id) [ syntheticPose ]
+                            |> Game.recordPoses 8001 (Just syntheticTarget.id) [ syntheticPose ]
                 in
                 Expect.equal ( [ 1 ], [ 0 ] )
                     ( List.map .score atDeadline.players, List.map .score afterDeadline.players )

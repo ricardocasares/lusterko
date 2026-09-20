@@ -7,6 +7,7 @@ module Game exposing
     , currentPose
     , holdFraction
     , recordPoses
+    , roundMillis
     , tick
     )
 
@@ -35,6 +36,13 @@ holdGraceMillis =
 holdMillis : Int
 holdMillis =
     500
+
+
+{-| How long players get to match each pose.
+-}
+roundMillis : Int
+roundMillis =
+    5000
 
 
 type Phase
@@ -246,7 +254,7 @@ startNext now game =
     case game.remaining of
         target :: rest ->
             { game
-                | phase = Playing target (now + 10000)
+                | phase = Playing target (now + roundMillis)
                 , remaining = rest
                 , shown = game.shown + 1
                 , players = resetHolds game.players
