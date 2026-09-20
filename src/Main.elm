@@ -529,8 +529,10 @@ targetPoseOverlay game =
                     (div [ HA.class "shrink-0 pb-5 text-sm font-black uppercase tracking-[.2em] text-fuchsia-300 sm:text-base" ]
                         [ text (poseCounter game.shown game.total) ]
                     )
-                , div [ HA.class "absolute bottom-4 right-4 z-10 min-w-40 px-8 py-4 text-center text-8xl font-black leading-none tabular-nums text-white shadow-xl backdrop-blur-sm sm:bottom-6 sm:right-6 sm:min-w-56 sm:text-[10rem]" ]
-                    [ text (secondsLeft game.now deadline) ]
+                , div [ HA.class "absolute bottom-4 right-4 z-10 min-w-24 rounded-3xl bg-black/35 px-5 py-4 text-white shadow-xl backdrop-blur-sm sm:bottom-6 sm:right-6 sm:min-w-32 sm:px-6 sm:py-5" ]
+                    [ strong [ HA.class "block text-center text-5xl font-black leading-none tabular-nums sm:text-7xl" ] [ text (secondsLeft game.now deadline) ]
+                    , div [ HA.class "mt-4 h-1.5" ] []
+                    ]
                 ]
 
         Game.Celebrating _ scorers ->
@@ -699,7 +701,7 @@ playerCard game index player =
     in
     div
         [ HA.class "min-w-24 rounded-3xl px-5 py-4 text-zinc-950 shadow-xl transition sm:min-w-32 sm:px-6 sm:py-5"
-        , HA.classList [ ( "opacity-100", player.active ), ( "opacity-45", not player.active ), ( "scale-110", player.matching ) ]
+        , HA.classList [ ( "scale-110", player.matching ) ]
         , HA.style "background" (playerColor index)
         , HA.attribute "aria-label" (playerName index ++ " score " ++ String.fromInt player.score)
         ]
