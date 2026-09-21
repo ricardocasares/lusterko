@@ -82,7 +82,7 @@ update msg model =
             ( Shuffling, Task.perform (GameStarted targets) Time.now )
 
         GameStarted targets now ->
-            ( Running (Game.begin (Time.posixToMillis now) targets), playSound (Just Sound.Ready) )
+            ( Running (Game.begin (Time.posixToMillis now) targets), playSound Sound.Ready )
 
         Tick now ->
             case model of
@@ -108,7 +108,7 @@ update msg model =
                         recorded =
                             Game.recordPoses capturedAt requestedTarget poses game
                     in
-                    ( Running recorded, playSound (phaseSound game recorded) )
+                    ( Running recorded, playPhaseSound (phaseSound game recorded) )
 
                 ( Running _, Err error ) ->
                     ( Failed (friendlyCameraError error), Cmd.none )
@@ -174,11 +174,11 @@ advance now game =
             in
             case advanced.phase of
                 Game.Results _ ->
-                    ( Running advanced, playSound sound )
+                    ( Running advanced, playPhaseSound sound )
 
                 _ ->
                     if advanced.sampling then
-                        ( Running advanced, playSound sound )
+                        ( Running advanced, playPhaseSound sound )
 
                     else
                         let
@@ -191,7 +191,7 @@ advance now game =
                         -- The elm-ffi polyfill can only have one call in flight at a time, so the
                         -- sound is chained ahead of the sample instead of batched beside it.
                         ( Running { advanced | sampling = True }
-                        , soundTask sound
+                        , phaseSoundTask sound
                             |> Task.andThen (\_ -> Camera.samplePoses now)
                             |> Task.attempt (PosesSampled capturedAt requestedTarget)
                         )
@@ -226,16 +226,23 @@ phaseSound before after =
                 Nothing
 
 
-soundTask : Maybe Sound.Sound -> Task String ()
-soundTask =
-    Maybe.map Sound.play >> Maybe.withDefault (Task.succeed ())
-
-
 {-| Sounds are fire-and-forget: cuelume never throws, so the result is ignored.
 -}
-playSound : Maybe Sound.Sound -> Cmd Msg
+playSound : Sound.Sound -> Cmd Msg
 playSound sound =
-    soundTask sound |> Task.attempt (always SoundPlayed)
+    Sound.play sound |> Task.attempt (always SoundPlayed)
+
+
+playPhaseSound : Maybe Sound.Sound -> Cmd Msg
+playPhaseSound =
+    Maybe.map playSound >> Maybe.withDefault Cmd.none
+
+
+{-| For chaining a possible sound ahead of another ffi task.
+-}
+phaseSoundTask : Maybe Sound.Sound -> Task String ()
+phaseSoundTask =
+    Maybe.map Sound.play >> Maybe.withDefault (Task.succeed ())
 
 
 countdownSeconds : Game.Game -> Maybe String
